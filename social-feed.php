@@ -2,7 +2,7 @@
 /*
 Plugin Name: Social Feed
 Description: Displays a grid of recent posts from an Instagram page using a shortcode.
-Version: 1.0.1
+Version: 1.0.2
 Author: Strong Anchor Tech
 Author URI: https://stronganchortech.com/
 */
@@ -48,6 +48,12 @@ function instagram_feed_shortcode( $atts ) {
 		return '<p>' . esc_html__( 'Instagram feed is not configured.', 'social-feed' ) . '</p>';
 	}
 
+	$cache_key = 'social_feed_instagram_' . md5( $handle . '|' . $limit . '|' . md5( $access_token ) );
+	$cached    = get_transient( $cache_key );
+	if ( is_string( $cached ) && '' !== $cached ) {
+		return $cached;
+	}
+
 	$url = add_query_arg(
 		array(
 			'fields'       => 'caption,media_url,permalink',
@@ -66,12 +72,16 @@ function instagram_feed_shortcode( $atts ) {
 	);
 
 	if ( is_wp_error( $response ) || 200 !== wp_remote_retrieve_response_code( $response ) ) {
-		return '<p>' . esc_html__( 'Unable to load Instagram feed.', 'social-feed' ) . '</p>';
+		$message = '<p>' . esc_html__( 'Unable to load Instagram feed.', 'social-feed' ) . '</p>';
+		set_transient( $cache_key, $message, 2 * MINUTE_IN_SECONDS );
+		return $message;
 	}
 
 	$data = json_decode( wp_remote_retrieve_body( $response ), true );
 	if ( empty( $data['data'] ) || ! is_array( $data['data'] ) ) {
-		return '<p>' . esc_html__( 'No Instagram posts found.', 'social-feed' ) . '</p>';
+		$message = '<p>' . esc_html__( 'No Instagram posts found.', 'social-feed' ) . '</p>';
+		set_transient( $cache_key, $message, 2 * MINUTE_IN_SECONDS );
+		return $message;
 	}
 
 	$output = '<div class="instagram-feed">';
@@ -94,6 +104,8 @@ function instagram_feed_shortcode( $atts ) {
 		$output .= '</div>';
 	}
 	$output .= '</div>';
+
+	set_transient( $cache_key, $output, 10 * MINUTE_IN_SECONDS );
 
 	return $output;
 }
